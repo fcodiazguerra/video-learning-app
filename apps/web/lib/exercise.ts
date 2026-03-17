@@ -10,12 +10,13 @@ const STOP_WORDS = new Set([
   "don't", "doesn't", "hasn't", "haven't", "won't", "can't",
 ])
 
-// How often a candidate word becomes a blank (every Nth candidate).
-const BLANK_EVERY: Record<Difficulty, number> = {
-  easy:    5,  // ~20% of content words
-  normal:  3,  // ~33% of content words
-  hard:    2,  // ~50% of content words
-  extreme: 1,  // 100% — every word
+// Fraction of candidate words that become blanks per phrase.
+// Minimum 1 blank guaranteed per phrase (when candidates exist).
+const BLANK_RATIO: Record<Difficulty, number> = {
+  easy:    0.3,  // ~30% of content words
+  normal:  0.5,  // ~50% of content words
+  hard:    0.7,  // ~70% of content words
+  extreme: 1.0,  // 100% — every word
 }
 
 // Splits "Hello," → ["Hello", ","]  and  "world." → ["world", "."]
@@ -28,26 +29,36 @@ type TokenKind = 'word' | 'blank'
 
 export function lineToTokens(segment: SubtitleSegment, difficulty: Difficulty = 'normal'): ExerciseLine {
   const words = segment.text.trim().split(/\s+/)
-  let blankCounter = 0
-  const every = BLANK_EVERY[difficulty]
+  const ratio = BLANK_RATIO[difficulty]
 
-  const tokens: Token[] = words.map((raw, i) => {
+  // Collect candidate indices first (two-pass so we know the total).
+  const candidateIndices: number[] = []
+  const parsed = words.map((raw, i) => {
     const [word, suffix] = splitWordAndSuffix(raw)
     const answer = word.toLowerCase()
-
-    // Extreme: every word is a candidate. Others: content words only.
     const isCandidate = difficulty === 'extreme'
       ? word.length > 0
       : word.length > 3 && !STOP_WORDS.has(answer)
-
-    let kind: TokenKind = 'word'
-    if (isCandidate) {
-      blankCounter++
-      if (blankCounter % every === 0) kind = 'blank'
-    }
-
-    return { kind, word, suffix, answer, index: i }
+    if (isCandidate) candidateIndices.push(i)
+    return { word, suffix, answer }
   })
+
+  // How many blanks to create for this phrase — at least 1 if any candidates exist.
+  const targetBlanks = candidateIndices.length === 0
+    ? 0
+    : Math.max(1, Math.round(candidateIndices.length * ratio))
+
+  // Pick blank indices evenly distributed across candidates (deterministic).
+  const blankSet = new Set<number>()
+  for (let i = 0; i < targetBlanks; i++) {
+    const pick = Math.floor(i * candidateIndices.length / targetBlanks)
+    blankSet.add(candidateIndices[pick])
+  }
+
+  const tokens: Token[] = parsed.map(({ word, suffix, answer }, i) => ({
+    kind: blankSet.has(i) ? 'blank' : 'word' as TokenKind,
+    word, suffix, answer, index: i,
+  }))
 
   return { segment, tokens }
 }
