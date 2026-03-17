@@ -1,6 +1,8 @@
 import { SubtitleSegment, Token, ExerciseLine } from './types'
 
-// Words that should never be turned into blanks.
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'extreme'
+
+// Words that should never be turned into blanks (except in extreme mode).
 const STOP_WORDS = new Set([
   'the', 'a', 'an', 'is', 'it', 'to', 'of', 'and', 'or', 'in', 'on',
   'at', 'by', 'for', 'with', 'as', 'if', 'do', 'be', 'so', 'not',
@@ -8,27 +10,40 @@ const STOP_WORDS = new Set([
   "don't", "doesn't", "hasn't", "haven't", "won't", "can't",
 ])
 
+// How often a candidate word becomes a blank (every Nth candidate).
+const BLANK_EVERY: Record<Difficulty, number> = {
+  easy:    5,  // ~20% of content words
+  normal:  3,  // ~33% of content words
+  hard:    2,  // ~50% of content words
+  extreme: 1,  // 100% — every word
+}
+
 // Splits "Hello," → ["Hello", ","]  and  "world." → ["world", "."]
 function splitWordAndSuffix(raw: string): [string, string] {
   const match = raw.match(/^([\w'']+)([^\w'']*)$/)
   return match ? [match[1], match[2]] : [raw, '']
 }
 
-// Rule: every 3rd content word (length > 3, not a stop word) becomes a blank.
-// Deterministic — same input always produces the same blanks.
-export function lineToTokens(segment: SubtitleSegment): ExerciseLine {
+type TokenKind = 'word' | 'blank'
+
+export function lineToTokens(segment: SubtitleSegment, difficulty: Difficulty = 'normal'): ExerciseLine {
   const words = segment.text.trim().split(/\s+/)
   let blankCounter = 0
+  const every = BLANK_EVERY[difficulty]
 
   const tokens: Token[] = words.map((raw, i) => {
     const [word, suffix] = splitWordAndSuffix(raw)
     const answer = word.toLowerCase()
-    const isCandidate = word.length > 3 && !STOP_WORDS.has(answer)
+
+    // Extreme: every word is a candidate. Others: content words only.
+    const isCandidate = difficulty === 'extreme'
+      ? word.length > 0
+      : word.length > 3 && !STOP_WORDS.has(answer)
 
     let kind: TokenKind = 'word'
     if (isCandidate) {
       blankCounter++
-      if (blankCounter % 3 === 0) kind = 'blank'
+      if (blankCounter % every === 0) kind = 'blank'
     }
 
     return { kind, word, suffix, answer, index: i }
@@ -37,8 +52,11 @@ export function lineToTokens(segment: SubtitleSegment): ExerciseLine {
   return { segment, tokens }
 }
 
-type TokenKind = 'word' | 'blank'
+export function buildExercise(segments: SubtitleSegment[], difficulty: Difficulty = 'normal'): ExerciseLine[] {
+  return segments.map((s) => lineToTokens(s, difficulty))
+}
 
-export function buildExercise(segments: SubtitleSegment[]): ExerciseLine[] {
-  return segments.map(lineToTokens)
+export function parseDifficulty(value: string | null): Difficulty {
+  if (value === 'easy' || value === 'normal' || value === 'hard' || value === 'extreme') return value
+  return 'normal'
 }

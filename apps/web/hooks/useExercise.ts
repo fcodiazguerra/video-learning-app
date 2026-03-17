@@ -46,7 +46,7 @@ export function useExercise(lines: ExerciseLine[]) {
     if (completedLinesRef.current.has(lineIndex)) return
     completedLinesRef.current.add(lineIndex)
     if (graceRemainingRef.current === null) return // grace never started — nothing to top up
-    const next = Math.min(GRACE_MAX, graceRemainingRef.current + GRACE_BONUS)
+    const next = Math.min(GRACE_SECONDS, graceRemainingRef.current + GRACE_BONUS)
     graceRemainingRef.current = next
     setGraceRemaining(next)
   }, [])

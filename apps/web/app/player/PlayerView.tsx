@@ -5,15 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { VideoPlayer } from '../../components/VideoPlayer'
 import { ExerciseLine } from '../../components/ExerciseLine'
 import { CREED_SUBTITLES } from '../../lib/creedSubtitles'
-import { buildExercise } from '../../lib/exercise'
+import { buildExercise, parseDifficulty } from '../../lib/exercise'
 import { useExercise } from '../../hooks/useExercise'
 import { useYouTubePlayer } from '../../hooks/useYouTubePlayer'
 
 export function PlayerView() {
-  const params  = useSearchParams()
-  const videoId = params.get('v') ?? ''
+  const params     = useSearchParams()
+  const videoId    = params.get('v') ?? ''
+  const difficulty = parseDifficulty(params.get('d'))
 
-  const lines = useMemo(() => buildExercise(CREED_SUBTITLES), [])
+  const lines = useMemo(() => buildExercise(CREED_SUBTITLES, difficulty), [difficulty])
 
   const {
     activeIndex, maxReachedIndex,
