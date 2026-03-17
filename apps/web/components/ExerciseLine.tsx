@@ -7,6 +7,7 @@ interface Props {
   line: ExerciseLineType
   answers: Record<number, AnswerState>
   onAnswer: (tokenIndex: number, value: string) => void
+  onReveal?: (tokenIndex: number) => void
   onWordClick?: (word: string) => void
 }
 
@@ -14,6 +15,7 @@ interface BlankProps {
   token: Token
   answer: AnswerState | undefined
   onAnswer: (value: string) => void
+  onReveal?: () => void
   shouldFocus: boolean
   onWordClick?: (word: string) => void
 }
@@ -22,7 +24,7 @@ function isAlpha(c: string): boolean {
   return /[a-zA-Z]/.test(c)
 }
 
-function BlankInput({ token, answer, onAnswer, shouldFocus, onWordClick }: BlankProps) {
+function BlankInput({ token, answer, onAnswer, onReveal, shouldFocus, onWordClick }: BlankProps) {
   const [typed, setTyped]         = useState('')
   const [wrongChar, setWrongChar] = useState<string | null>(null)
   const spanRef       = useRef<HTMLSpanElement>(null)
@@ -59,6 +61,11 @@ function BlankInput({ token, answer, onAnswer, shouldFocus, onWordClick }: Blank
     if (isCorrect) return
     if (e.key === 'Tab') return
     if (e.key === 'Backspace') return
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      onReveal?.()
+      return
+    }
     if (e.key.length !== 1) return
 
     e.preventDefault()
@@ -136,7 +143,7 @@ function BlankInput({ token, answer, onAnswer, shouldFocus, onWordClick }: Blank
   )
 }
 
-export function ExerciseLine({ line, answers, onAnswer, onWordClick }: Props) {
+export function ExerciseLine({ line, answers, onAnswer, onReveal, onWordClick }: Props) {
   const firstIncompleteIdx = line.tokens.find(
     (t) => t.kind === 'blank' && answers[t.index]?.status !== 'correct'
   )?.index ?? -1
@@ -161,6 +168,7 @@ export function ExerciseLine({ line, answers, onAnswer, onWordClick }: Props) {
             token={token}
             answer={answers[token.index]}
             onAnswer={(value) => onAnswer(token.index, value)}
+            onReveal={() => onReveal?.(token.index)}
             shouldFocus={token.index === firstIncompleteIdx}
             onWordClick={onWordClick}
           />

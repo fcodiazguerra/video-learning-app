@@ -30,7 +30,7 @@ export function PlayerView() {
     activeIndex, maxReachedIndex,
     setActiveByTime, handleTimeUpdate,
     pauseGrace, resumeGrace,
-    submitAnswer, answers, score,
+    submitAnswer, revealBlank, answers, score,
     graceActive, graceRemaining, graceMax,
     gameOver, freePlay,
     resetGame, continueWithoutScore,
@@ -281,6 +281,7 @@ export function PlayerView() {
               <kbd className="bg-gray-100 border border-gray-300 rounded px-1">↑</kbd>
               <kbd className="bg-gray-100 border border-gray-300 rounded px-1">↓</kbd> navigate
             </span>
+            <span><kbd className="bg-gray-100 border border-gray-300 rounded px-1">↵</kbd> reveal</span>
           </div>
         )}
 
@@ -334,6 +335,7 @@ export function PlayerView() {
               line={activeLine}
               answers={activeAnswers}
               onAnswer={(tokenIndex, value) => submitAnswer(activeIndex, tokenIndex, value)}
+              onReveal={(tokenIndex) => revealBlank(activeIndex, tokenIndex)}
               onWordClick={handleWordClick}
             />
             {lineComplete && blanksTotal > 0 && (

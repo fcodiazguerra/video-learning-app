@@ -181,6 +181,41 @@ export function useExercise(lines: ExerciseLine[], difficulty: Difficulty) {
     [lines, checkGrace, awardBonusForBlank]
   )
 
+  // Reveal the answer for a blank (Enter key). Applies a time penalty instead of a bonus.
+  const revealBlank = useCallback(
+    (lineIndex: number, tokenIndex: number) => {
+      const token = lines[lineIndex]?.tokens[tokenIndex]
+      if (!token || token.kind !== 'blank') return
+
+      // Prevent bonus being awarded for this blank
+      const key = `${lineIndex}-${tokenIndex}`
+      awardedBlanksRef.current.add(key)
+
+      // Deduct time (same rate as bonus) — no penalty in free play
+      if (graceRemainingRef.current !== null && !freePlayRef.current) {
+        const penalty = bonusForBlank(token.answer.length, difficulty)
+        const next = Math.max(0, graceRemainingRef.current - penalty)
+        graceRemainingRef.current = next
+        setGraceRemaining(next)
+        if (next <= 0) {
+          stopGrace()
+          setGameOver(true)
+          return
+        }
+      }
+
+      setAnswers((prev) => {
+        const next = {
+          ...prev,
+          [lineIndex]: { ...prev[lineIndex], [tokenIndex]: { value: token.answer, status: 'correct' as AnswerStatus } },
+        }
+        checkGrace(lineIndex, next)
+        return next
+      })
+    },
+    [lines, difficulty, stopGrace, checkGrace]
+  )
+
   const score = useMemo(() => {
     let correct = 0, incorrect = 0
     for (const la of Object.values(answers))
@@ -222,7 +257,7 @@ export function useExercise(lines: ExerciseLine[], difficulty: Difficulty) {
     activeIndex, maxReachedIndex,
     setActiveByTime, handleTimeUpdate,
     pauseGrace, resumeGrace,
-    submitAnswer, answers, score,
+    submitAnswer, revealBlank, answers, score,
     graceActive, graceRemaining,
     graceMax: GRACE_SECONDS,
     gameOver, freePlay,
