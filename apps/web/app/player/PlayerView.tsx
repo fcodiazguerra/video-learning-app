@@ -4,17 +4,27 @@ import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { VideoPlayer } from '../../components/VideoPlayer'
 import { ExerciseLine } from '../../components/ExerciseLine'
-import { CREED_SUBTITLES } from '../../lib/creedSubtitles'
 import { buildExercise, parseDifficulty } from '../../lib/exercise'
 import { useExercise } from '../../hooks/useExercise'
 import { useYouTubePlayer } from '../../hooks/useYouTubePlayer'
+import { SubtitleSegment } from '../../lib/types'
 
 export function PlayerView() {
   const params     = useSearchParams()
   const videoId    = params.get('v') ?? ''
   const difficulty = parseDifficulty(params.get('d'))
 
-  const lines = useMemo(() => buildExercise(CREED_SUBTITLES, difficulty), [difficulty])
+  const segments = useMemo<SubtitleSegment[] | null>(() => {
+    if (!videoId) return null
+    const raw = sessionStorage.getItem(`srt:${videoId}`)
+    if (!raw) return null
+    try { return JSON.parse(raw) } catch { return null }
+  }, [videoId])
+
+  const lines = useMemo(
+    () => segments ? buildExercise(segments, difficulty) : [],
+    [segments, difficulty]
+  )
 
   const {
     activeIndex, maxReachedIndex,
@@ -188,11 +198,11 @@ export function PlayerView() {
   }, [lines, pauseGrace, seekTo, play])
 
   // ── Render ──────────────────────────────────────────────────────────────────
-  if (!videoId) {
+  if (!videoId || !segments) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">
-        No video ID.{' '}
-        <a href="/" className="ml-1 underline text-blue-600">Go back</a>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-sm">
+        <p className="text-gray-500">No subtitles found for this video.</p>
+        <a href="/" className="underline text-blue-600">Go back</a>
       </div>
     )
   }

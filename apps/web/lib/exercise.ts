@@ -36,9 +36,10 @@ export function lineToTokens(segment: SubtitleSegment, difficulty: Difficulty = 
   const parsed = words.map((raw, i) => {
     const [word, suffix] = splitWordAndSuffix(raw)
     const answer = word.toLowerCase()
-    const isCandidate = difficulty === 'extreme'
+    const hasLetter = /[a-zA-Z]/.test(word)
+    const isCandidate = hasLetter && (difficulty === 'extreme'
       ? word.length > 0
-      : word.length > 3 && !STOP_WORDS.has(answer)
+      : word.length > 3 && !STOP_WORDS.has(answer))
     if (isCandidate) candidateIndices.push(i)
     return { word, suffix, answer }
   })

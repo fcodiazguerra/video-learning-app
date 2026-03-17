@@ -18,14 +18,25 @@ interface BlankProps {
   onWordClick?: (word: string) => void
 }
 
+function isAlpha(c: string): boolean {
+  return /[a-zA-Z]/.test(c)
+}
+
 function BlankInput({ token, answer, onAnswer, shouldFocus, onWordClick }: BlankProps) {
   const [typed, setTyped]         = useState('')
   const [wrongChar, setWrongChar] = useState<string | null>(null)
-  const spanRef      = useRef<HTMLSpanElement>(null)
+  const spanRef       = useRef<HTMLSpanElement>(null)
   const wrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isCorrect = answer?.status === 'correct'
-  const expected  = token.answer
+  const expected  = token.answer  // e.g. "i'm", "they're"
+
+  // Next position in expected that requires user input (skip punctuation)
+  const nextAlphaPos = (() => {
+    let pos = typed.length
+    while (pos < expected.length && !isAlpha(expected[pos])) pos++
+    return pos
+  })()
 
   // Focus this blank whenever it becomes the active target
   useEffect(() => {
@@ -46,43 +57,51 @@ function BlankInput({ token, answer, onAnswer, shouldFocus, onWordClick }: Blank
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
     if (isCorrect) return
-
-    // Tab: let through for natural focus navigation
     if (e.key === 'Tab') return
-
-    // Backspace always bubbles to the global handler → replays the phrase.
-    // There is no delete: characters are accepted or rejected one-by-one.
     if (e.key === 'Backspace') return
-
-    // Non-printable keys (arrows, etc.) bubble to global handler
     if (e.key.length !== 1) return
 
     e.preventDefault()
 
-    const nextPos = typed.length
-    if (nextPos >= expected.length) return
+    if (nextAlphaPos >= expected.length) return
 
-    if (e.key.toLowerCase() === expected[nextPos]) {
-      const newTyped = typed + expected[nextPos]
+    if (e.key.toLowerCase() === expected[nextAlphaPos]) {
+      // Advance typed to include all chars up to and including nextAlphaPos
+      // (this auto-fills any punctuation between the previous letter and this one)
+      const newTyped = expected.slice(0, nextAlphaPos + 1)
       setTyped(newTyped)
-      if (newTyped === expected) onAnswer(newTyped)
+
+      // Word is complete when no more alpha chars remain
+      const remaining = expected.slice(nextAlphaPos + 1)
+      if (!remaining.split('').some(isAlpha)) {
+        onAnswer(expected)
+      }
     } else {
-      // Flash wrong character in red for 600 ms
       if (wrongTimerRef.current) clearTimeout(wrongTimerRef.current)
       setWrongChar(e.key)
       wrongTimerRef.current = setTimeout(() => setWrongChar(null), 600)
     }
   }
 
-  // Render one fixed-width slot per character of the expected answer
+  // One slot per character of expected answer.
+  // Punctuation/non-alpha chars are always pre-shown.
+  // Alpha chars follow the typed-progress logic.
   const slots = Array.from({ length: expected.length }, (_, i) => {
+    const char = expected[i]
+
     if (isCorrect) {
-      return <span key={i} className="text-green-700">{expected[i]}</span>
+      return <span key={i} className="text-green-700">{char}</span>
     }
+
+    if (!isAlpha(char)) {
+      // Pre-shown punctuation
+      return <span key={i} className="text-gray-500">{char}</span>
+    }
+
     if (i < typed.length) {
-      return <span key={i} className="text-gray-900">{typed[i]}</span>
+      return <span key={i} className="text-gray-900">{char}</span>
     }
-    if (i === typed.length && wrongChar !== null) {
+    if (i === nextAlphaPos && wrongChar !== null) {
       return <span key={i} className="text-red-500">{wrongChar}</span>
     }
     return <span key={i} className="text-gray-300">_</span>
@@ -98,7 +117,6 @@ function BlankInput({ token, answer, onAnswer, shouldFocus, onWordClick }: Blank
     <span className="inline-flex items-baseline gap-0">
       <span
         ref={spanRef}
-        // data-blank lets the global Backspace handler know we're in a blank
         data-blank="true"
         tabIndex={isCorrect ? -1 : 0}
         onKeyDown={handleKeyDown}
