@@ -29,9 +29,17 @@ export function PlayerView() {
 
   // ── Word list ───────────────────────────────────────────────────────────────
   const [savedWords, setSavedWords] = useState<string[]>([])
+  const [copied, setCopied] = useState(false)
   const handleWordClick = useCallback((word: string) => {
     setSavedWords((prev) => prev.includes(word) ? prev : [...prev, word])
   }, [])
+  const handleCopyWords = useCallback(() => {
+    const text = savedWords.map((w, i) => `${i + 1} - ${w}`).join('\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }, [savedWords])
 
   // ── Game-level pause (user button) ─────────────────────────────────────────
   // gamePausedRef: read synchronously in effects to avoid stale-closure races.
@@ -335,9 +343,19 @@ export function PlayerView() {
       {/* Word list sidebar */}
       <div className="w-48 flex-shrink-0 sticky top-6">
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-            Word list
-          </p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Word list
+            </p>
+            {savedWords.length > 0 && (
+              <button
+                onClick={handleCopyWords}
+                className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            )}
+          </div>
           {savedWords.length === 0 ? (
             <p className="text-xs text-gray-400 italic">Click any word to save it here.</p>
           ) : (
