@@ -2,21 +2,20 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { ExerciseLine, AnswerState, AnswerStatus } from '../lib/types'
+import { Difficulty, bonusForBlank } from '../lib/exercise'
 
 type LineAnswers = Record<number, AnswerState>
 type AllAnswers = Record<number, LineAnswers>
 
-const GRACE_SECONDS = 15  // starting grace time
-const GRACE_MAX     = 20  // absolute cap after bonuses
-const GRACE_BONUS   =  4  // seconds awarded per completed phrase
+const GRACE_SECONDS = 15  // fixed starting grace time
 
-export function useExercise(lines: ExerciseLine[]) {
-  const [answers, setAnswers]             = useState<AllAnswers>({})
-  const [activeIndex, setActiveIndex]     = useState(0)
+export function useExercise(lines: ExerciseLine[], difficulty: Difficulty) {
+  const [answers, setAnswers]               = useState<AllAnswers>({})
+  const [activeIndex, setActiveIndex]       = useState(0)
   const [graceRemaining, setGraceRemaining] = useState<number | null>(null)
-  const [graceActive, setGraceActive]     = useState(false)
-  const [gameOver, setGameOver]           = useState(false)
-  const [freePlay, setFreePlay]           = useState(false)
+  const [graceActive, setGraceActive]       = useState(false)
+  const [gameOver, setGameOver]             = useState(false)
+  const [freePlay, setFreePlay]             = useState(false)
   const [maxReachedIndex, setMaxReachedIndex] = useState(0)
 
   const graceIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -25,7 +24,7 @@ export function useExercise(lines: ExerciseLine[]) {
   const gameOverRef       = useRef(false)
   const freePlayRef       = useRef(false)
   const maxReachedRef     = useRef(0)
-  const completedLinesRef = useRef<Set<number>>(new Set())
+  const awardedBlanksRef  = useRef<Set<string>>(new Set())
 
   useEffect(() => { gameOverRef.current = gameOver }, [gameOver])
   useEffect(() => { freePlayRef.current = freePlay },  [freePlay])
@@ -41,26 +40,29 @@ export function useExercise(lines: ExerciseLine[]) {
     [lines]
   )
 
-  // Award bonus seconds when a phrase is completed (idempotent).
-  const awardBonusForLine = useCallback((lineIndex: number) => {
-    if (completedLinesRef.current.has(lineIndex)) return
-    completedLinesRef.current.add(lineIndex)
-    if (graceRemainingRef.current === null) return // grace never started — nothing to top up
-    const next = Math.min(GRACE_SECONDS, graceRemainingRef.current + GRACE_BONUS)
+  // Award bonus for a single correct blank (idempotent per blank).
+  // Bonus = answer.length × bonus-per-char for this difficulty.
+  const awardBonusForBlank = useCallback((lineIndex: number, tokenIndex: number, answerLength: number) => {
+    const key = `${lineIndex}-${tokenIndex}`
+    if (awardedBlanksRef.current.has(key)) return
+    awardedBlanksRef.current.add(key)
+    if (graceRemainingRef.current === null) return
+    const bonus = bonusForBlank(answerLength, difficulty)
+    const next  = Math.min(GRACE_SECONDS, graceRemainingRef.current + bonus)
     graceRemainingRef.current = next
     setGraceRemaining(next)
-  }, [])
+  }, [difficulty])
 
-  // Stop/pause the grace interval. Does NOT reset the remaining time.
+  // Stop grace. Does NOT reset the remaining time (carry-over to next phrase).
   const stopGrace = useCallback(() => {
-    if (graceDelayRef.current)    { clearTimeout(graceDelayRef.current);   graceDelayRef.current   = null }
+    if (graceDelayRef.current)    { clearTimeout(graceDelayRef.current);    graceDelayRef.current   = null }
     if (graceIntervalRef.current) { clearInterval(graceIntervalRef.current); graceIntervalRef.current = null }
     setGraceActive(false)
   }, [])
 
-  // Pause grace (e.g. Backspace replay, manual game pause). Preserves remaining value.
+  // Pause grace (manual game pause or Backspace). Preserves remaining value.
   const pauseGrace = useCallback(() => {
-    if (graceDelayRef.current)    { clearTimeout(graceDelayRef.current);   graceDelayRef.current   = null }
+    if (graceDelayRef.current)    { clearTimeout(graceDelayRef.current);    graceDelayRef.current   = null }
     if (graceIntervalRef.current) { clearInterval(graceIntervalRef.current); graceIntervalRef.current = null }
     setGraceActive(false)
   }, [])
@@ -79,7 +81,7 @@ export function useExercise(lines: ExerciseLine[]) {
         setGraceActive(false)
         return
       }
-      // In free play the timer stays frozen at full — no countdown, no game over
+      // In free play the timer stays frozen — no countdown, no game over
       if (freePlayRef.current) return
       const next = (graceRemainingRef.current ?? from) - 0.1
       graceRemainingRef.current = next
@@ -93,10 +95,10 @@ export function useExercise(lines: ExerciseLine[]) {
     }, 100)
   }, [])
 
-  // Resume grace countdown after a manual game pause (picks up from where it left off).
+  // Resume after a manual game pause (picks up from where it left off).
   const resumeGrace = useCallback(() => {
-    if (graceRemainingRef.current === null) return   // grace never started
-    if (graceIntervalRef.current) return             // already running
+    if (graceRemainingRef.current === null) return
+    if (graceIntervalRef.current) return
     startGraceInterval(graceRemainingRef.current)
   }, [startGraceInterval])
 
@@ -113,7 +115,6 @@ export function useExercise(lines: ExerciseLine[]) {
       const idx = lines.findIndex((l) => time >= l.segment.start && time < l.segment.end)
       if (idx === -1) return
       setActiveIndex((prev) => {
-        // Don't advance while grace countdown is actively running
         if (idx > prev && graceIntervalRef.current !== null) return prev
         if (idx > maxReachedRef.current) {
           maxReachedRef.current = idx
@@ -130,7 +131,6 @@ export function useExercise(lines: ExerciseLine[]) {
       if (gameOverRef.current) return
       const line = lines[lineIndex]
       if (!line) return
-      // Phrases with no blanks need no interaction
       const blanks = line.tokens.filter((t) => t.kind === 'blank')
       if (blanks.length === 0) return
 
@@ -139,13 +139,12 @@ export function useExercise(lines: ExerciseLine[]) {
 
       if (complete) {
         stopGrace()
-        awardBonusForLine(lineIndex)
       } else if (pastEnd && !graceIntervalRef.current && !graceDelayRef.current) {
         const from = graceRemainingRef.current ?? GRACE_SECONDS
         startGraceInterval(from)
       }
     },
-    [lines, isLineComplete, stopGrace, awardBonusForLine, startGraceInterval]
+    [lines, isLineComplete, stopGrace, startGraceInterval]
   )
 
   const checkGrace = useCallback(
@@ -153,10 +152,9 @@ export function useExercise(lines: ExerciseLine[]) {
       const lineAnswers = newAnswers[lineIndex] ?? {}
       if (isLineComplete(lineIndex, lineAnswers)) {
         stopGrace()
-        awardBonusForLine(lineIndex)
       }
     },
-    [isLineComplete, stopGrace, awardBonusForLine]
+    [isLineComplete, stopGrace]
   )
 
   const submitAnswer = useCallback(
@@ -167,6 +165,10 @@ export function useExercise(lines: ExerciseLine[]) {
       const status: AnswerStatus =
         value.trim().toLowerCase() === token.answer ? 'correct' : 'incorrect'
 
+      if (status === 'correct') {
+        awardBonusForBlank(lineIndex, tokenIndex, token.answer.length)
+      }
+
       setAnswers((prev) => {
         const next = {
           ...prev,
@@ -176,7 +178,7 @@ export function useExercise(lines: ExerciseLine[]) {
         return next
       })
     },
-    [lines, checkGrace]
+    [lines, checkGrace, awardBonusForBlank]
   )
 
   const score = useMemo(() => {
@@ -202,16 +204,16 @@ export function useExercise(lines: ExerciseLine[]) {
     gameOverRef.current       = false
     freePlayRef.current       = false
     maxReachedRef.current     = 0
-    completedLinesRef.current = new Set()
+    awardedBlanksRef.current  = new Set()
   }, [stopGrace])
 
   const continueWithoutScore = useCallback(() => {
     stopGrace()
     setGameOver(false)
     setFreePlay(true)
-    setGraceRemaining(GRACE_SECONDS)
+    setGraceRemaining(null)
     setGraceActive(false)
-    graceRemainingRef.current = GRACE_SECONDS  // bar shows full from the start
+    graceRemainingRef.current = null
     gameOverRef.current       = false
     freePlayRef.current       = true
   }, [stopGrace])
@@ -222,7 +224,7 @@ export function useExercise(lines: ExerciseLine[]) {
     pauseGrace, resumeGrace,
     submitAnswer, answers, score,
     graceActive, graceRemaining,
-    graceMax: GRACE_SECONDS,  // reference for the bar (100% = starting time)
+    graceMax: GRACE_SECONDS,
     gameOver, freePlay,
     resetGame, continueWithoutScore,
     isLineComplete,

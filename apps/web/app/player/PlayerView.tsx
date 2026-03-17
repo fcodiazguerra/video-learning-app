@@ -25,7 +25,7 @@ export function PlayerView() {
     gameOver, freePlay,
     resetGame, continueWithoutScore,
     isLineComplete,
-  } = useExercise(lines)
+  } = useExercise(lines, difficulty)
 
   // ── Game-level pause (user button) ─────────────────────────────────────────
   // gamePausedRef: read synchronously in effects to avoid stale-closure races.

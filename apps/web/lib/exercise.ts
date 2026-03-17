@@ -60,3 +60,16 @@ export function parseDifficulty(value: string | null): Difficulty {
   if (value === 'easy' || value === 'normal' || value === 'hard' || value === 'extreme') return value
   return 'normal'
 }
+
+// Bonus seconds awarded per character typed correctly, by difficulty.
+const BONUS_PER_CHAR: Record<Difficulty, number> = {
+  easy:    0.5,
+  normal:  0.6,
+  hard:    0.7,
+  extreme: 0.8,
+}
+
+// Bonus for completing a single blank (chars in the answer × rate).
+export function bonusForBlank(answerLength: number, difficulty: Difficulty): number {
+  return answerLength * BONUS_PER_CHAR[difficulty]
+}
