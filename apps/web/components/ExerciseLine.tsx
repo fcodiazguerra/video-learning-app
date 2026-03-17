@@ -7,6 +7,7 @@ interface Props {
   line: ExerciseLineType
   answers: Record<number, AnswerState>
   onAnswer: (tokenIndex: number, value: string) => void
+  onWordClick?: (word: string) => void
 }
 
 interface BlankProps {
@@ -14,9 +15,10 @@ interface BlankProps {
   answer: AnswerState | undefined
   onAnswer: (value: string) => void
   shouldFocus: boolean
+  onWordClick?: (word: string) => void
 }
 
-function BlankInput({ token, answer, onAnswer, shouldFocus }: BlankProps) {
+function BlankInput({ token, answer, onAnswer, shouldFocus, onWordClick }: BlankProps) {
   const [typed, setTyped]         = useState('')
   const [wrongChar, setWrongChar] = useState<string | null>(null)
   const spanRef      = useRef<HTMLSpanElement>(null)
@@ -100,7 +102,10 @@ function BlankInput({ token, answer, onAnswer, shouldFocus }: BlankProps) {
         data-blank="true"
         tabIndex={isCorrect ? -1 : 0}
         onKeyDown={handleKeyDown}
-        onClick={() => !isCorrect && spanRef.current?.focus()}
+        onClick={() => {
+          if (isCorrect) { onWordClick?.(token.answer); return }
+          spanRef.current?.focus()
+        }}
         className={`inline-flex font-mono text-sm border-b-2 px-0.5
           focus:outline-none focus:border-blue-500 cursor-text select-none
           ${borderColor}`}
@@ -113,7 +118,7 @@ function BlankInput({ token, answer, onAnswer, shouldFocus }: BlankProps) {
   )
 }
 
-export function ExerciseLine({ line, answers, onAnswer }: Props) {
+export function ExerciseLine({ line, answers, onAnswer, onWordClick }: Props) {
   const firstIncompleteIdx = line.tokens.find(
     (t) => t.kind === 'blank' && answers[t.index]?.status !== 'correct'
   )?.index ?? -1
@@ -123,7 +128,11 @@ export function ExerciseLine({ line, answers, onAnswer }: Props) {
       {line.tokens.map((token) => {
         if (token.kind === 'word') {
           return (
-            <span key={token.index} className="text-gray-800">
+            <span
+              key={token.index}
+              onClick={() => onWordClick?.(token.word)}
+              className={`text-gray-800 ${onWordClick ? 'cursor-pointer hover:text-blue-600 hover:underline' : ''}`}
+            >
               {token.word}{token.suffix}
             </span>
           )
@@ -135,6 +144,7 @@ export function ExerciseLine({ line, answers, onAnswer }: Props) {
             answer={answers[token.index]}
             onAnswer={(value) => onAnswer(token.index, value)}
             shouldFocus={token.index === firstIncompleteIdx}
+            onWordClick={onWordClick}
           />
         )
       })}

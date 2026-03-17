@@ -27,6 +27,12 @@ export function PlayerView() {
     isLineComplete,
   } = useExercise(lines, difficulty)
 
+  // ── Word list ───────────────────────────────────────────────────────────────
+  const [savedWords, setSavedWords] = useState<string[]>([])
+  const handleWordClick = useCallback((word: string) => {
+    setSavedWords((prev) => prev.includes(word) ? prev : [...prev, word])
+  }, [])
+
   // ── Game-level pause (user button) ─────────────────────────────────────────
   // gamePausedRef: read synchronously in effects to avoid stale-closure races.
   // gamePaused (state): drives the button UI.
@@ -203,7 +209,8 @@ export function PlayerView() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-4">
+      <div className="max-w-5xl mx-auto px-4 py-6 flex gap-4 items-start">
+      <div className="flex-1 flex flex-col gap-4 min-w-0">
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -309,6 +316,7 @@ export function PlayerView() {
               line={activeLine}
               answers={activeAnswers}
               onAnswer={(tokenIndex, value) => submitAnswer(activeIndex, tokenIndex, value)}
+              onWordClick={handleWordClick}
             />
             {lineComplete && blanksTotal > 0 && (
               <p className="text-sm text-green-600 font-medium">Phrase complete! Keep watching…</p>
@@ -321,6 +329,28 @@ export function PlayerView() {
             Press Start to begin…
           </div>
         )}
+
+      </div>{/* end main column */}
+
+      {/* Word list sidebar */}
+      <div className="w-48 flex-shrink-0 sticky top-6">
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            Word list
+          </p>
+          {savedWords.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">Click any word to save it here.</p>
+          ) : (
+            <ol className="flex flex-col gap-1">
+              {savedWords.map((w, i) => (
+                <li key={w} className="text-sm text-gray-800">
+                  <span className="text-gray-400 mr-1">{i + 1} -</span>{w}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
 
       </div>
     </main>
