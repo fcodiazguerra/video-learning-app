@@ -6,6 +6,7 @@ import { extractVideoId } from '../lib/youtube'
 import { Difficulty } from '../lib/exercise'
 import { parseSrt } from '../lib/parseSrt'
 import { setLocalVideoUrl } from '../lib/localVideo'
+import { SubtitleSegment } from '../lib/types'
 
 const DIFFICULTIES: { value: Difficulty; label: string; description: string }[] = [
   { value: 'easy',    label: 'Fácil',   description: '~1 de cada 5 palabras' },
@@ -16,6 +17,22 @@ const DIFFICULTIES: { value: Difficulty; label: string; description: string }[] 
 
 type Source = 'youtube' | 'local'
 
+function formatTime(s: number): string {
+  const m = Math.floor(s / 60)
+  const sec = Math.floor(s % 60)
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
+function parseTime(str: string): number | null {
+  const parts = str.split(':')
+  if (parts.length === 2) {
+    const m = parseInt(parts[0], 10)
+    const s = parseInt(parts[1], 10)
+    if (!isNaN(m) && !isNaN(s) && s < 60) return m * 60 + s
+  }
+  return null
+}
+
 export default function Home() {
   const router = useRouter()
   const [difficulty, setDifficulty] = useState<Difficulty>('normal')
@@ -25,7 +42,11 @@ export default function Home() {
   const [videoName, setVideoName]   = useState('')
   const [error, setError]           = useState('')
 
-  const srtRef       = useRef<string>('')
+  // Parsed segments + range state
+  const [parsedSegments, setParsedSegments] = useState<SubtitleSegment[] | null>(null)
+  const [rangeStart, setRangeStart]         = useState('')
+  const [rangeEnd, setRangeEnd]             = useState('')
+
   const srtFileRef   = useRef<HTMLInputElement>(null)
   const videoFileRef = useRef<HTMLInputElement>(null)
   const blobUrlRef   = useRef<string>('')
@@ -35,7 +56,19 @@ export default function Home() {
     if (!file) return
     setSrtName(file.name)
     const reader = new FileReader()
-    reader.onload = (ev) => { srtRef.current = ev.target?.result as string ?? '' }
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string ?? ''
+      const segments = parseSrt(text)
+      if (segments.length > 0) {
+        const minT = segments[0].start
+        const maxT = segments[segments.length - 1].end
+        setParsedSegments(segments)
+        setRangeStart(formatTime(minT))
+        setRangeEnd(formatTime(maxT))
+      } else {
+        setParsedSegments(null)
+      }
+    }
     reader.readAsText(file)
   }
 
@@ -51,13 +84,27 @@ export default function Home() {
     e.preventDefault()
     setError('')
 
-    if (!srtRef.current) {
+    if (!parsedSegments) {
       setError('Please upload an SRT subtitle file.')
       return
     }
-    const segments = parseSrt(srtRef.current)
-    if (segments.length === 0) {
-      setError('Could not parse the SRT file. Make sure it is a valid subtitle file.')
+
+    // Parse and validate range
+    const startSec = parseTime(rangeStart)
+    const endSec   = parseTime(rangeEnd)
+    if (startSec === null || endSec === null) {
+      setError('Invalid time format. Use M:SS (e.g. 1:30).')
+      return
+    }
+    if (startSec >= endSec) {
+      setError('Start time must be before end time.')
+      return
+    }
+
+    // Filter segments to the selected range
+    const filtered = parsedSegments.filter(s => s.start >= startSec && s.start < endSec)
+    if (filtered.length === 0) {
+      setError('No subtitles found in the selected range.')
       return
     }
 
@@ -67,18 +114,21 @@ export default function Home() {
         setError('Paste a valid YouTube URL (youtube.com/watch?v=... or youtu.be/...)')
         return
       }
-      sessionStorage.setItem(`srt:${videoId}`, JSON.stringify(segments))
+      sessionStorage.setItem(`srt:${videoId}`, JSON.stringify(filtered))
       router.push(`/player?v=${videoId}&d=${difficulty}`)
     } else {
       if (!blobUrlRef.current) {
         setError('Please select a video file.')
         return
       }
-      sessionStorage.setItem('srt:local', JSON.stringify(segments))
+      sessionStorage.setItem('srt:local', JSON.stringify(filtered))
       setLocalVideoUrl(blobUrlRef.current)
       router.push(`/player?source=local&d=${difficulty}`)
     }
   }
+
+  const minTime = parsedSegments ? formatTime(parsedSegments[0].start) : null
+  const maxTime = parsedSegments ? formatTime(parsedSegments[parsedSegments.length - 1].end) : null
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-8 px-4 bg-gray-50">
@@ -165,6 +215,41 @@ export default function Home() {
           inputRef={srtFileRef}
           onChange={handleSrtChange}
         />
+
+        {/* Range selector — shown once SRT is loaded */}
+        {parsedSegments && (
+          <div className="bg-white border border-gray-200 rounded-xl px-4 py-4 flex flex-col gap-3">
+            <p className="text-sm font-medium text-gray-700">
+              Video range
+              <span className="text-xs font-normal text-gray-400 ml-2">
+                ({minTime} – {maxTime})
+              </span>
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-1 flex-1">
+                <label className="text-xs text-gray-500">From</label>
+                <input
+                  type="text"
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(e.target.value)}
+                  placeholder="0:00"
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+              </div>
+              <span className="text-gray-400 mt-5">–</span>
+              <div className="flex flex-col gap-1 flex-1">
+                <label className="text-xs text-gray-500">To</label>
+                <input
+                  type="text"
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(e.target.value)}
+                  placeholder="10:00"
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-500">{error}</p>}
 

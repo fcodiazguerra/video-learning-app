@@ -73,19 +73,27 @@ export function PlayerView() {
   const graceActiveRef = useRef(graceActive)
   useEffect(() => { graceActiveRef.current = graceActive }, [graceActive])
 
+  const pauseRef = useRef<(() => void) | null>(null)
+
   const handleVideoTimeUpdate = useCallback(
     (time: number) => {
       if (gamePausedRef.current) return
+      const lastEnd = lines[lines.length - 1]?.segment.end
+      if (lastEnd !== undefined && time >= lastEnd) {
+        pauseRef.current?.()
+        return
+      }
       handleTimeUpdate(time, answers[activeIndex] ?? {}, activeIndex)
       setActiveByTime(time)
     },
-    [setActiveByTime, handleTimeUpdate, answers, activeIndex]
+    [setActiveByTime, handleTimeUpdate, answers, activeIndex, lines]
   )
 
   const ytPlayer    = useYouTubePlayer({ videoId, onTimeUpdate: handleVideoTimeUpdate, skip: isLocal })
   const localPlayer = useLocalVideoPlayer({ src: isLocal ? (getLocalVideoUrl() ?? '') : '', onTimeUpdate: handleVideoTimeUpdate, skip: !isLocal })
 
   const { isReady, pause, play, seekTo } = isLocal ? localPlayer : ytPlayer
+  pauseRef.current = pause
   const containerRef = isLocal ? undefined : ytPlayer.containerRef
   const videoRef     = isLocal ? localPlayer.videoRef : undefined
 
@@ -95,8 +103,10 @@ export function PlayerView() {
     setHasStarted(true)
     gamePausedRef.current = false
     setGamePaused(false)
+    const firstSegmentStart = lines[0]?.segment.start ?? 0
+    if (firstSegmentStart > 0) seekTo(firstSegmentStart)
     play()
-  }, [play])
+  }, [play, seekTo, lines])
 
   // Resume from a manual pause.
   // If paused mid-grace (video already stopped for an answer) → restart the countdown,
