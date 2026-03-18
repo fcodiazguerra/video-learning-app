@@ -16,6 +16,8 @@ export function PlayerView() {
   const videoId    = params.get('v') ?? ''
   const isLocal    = params.get('source') === 'local'
   const difficulty = parseDifficulty(params.get('d'))
+  const toParam    = params.get('to')
+  const hardEndSec = toParam !== null ? parseFloat(toParam) : null
 
   const segments = useMemo<SubtitleSegment[] | null>(() => {
     const key = isLocal ? 'srt:local' : `srt:${videoId}`
@@ -74,13 +76,14 @@ export function PlayerView() {
   useEffect(() => { graceActiveRef.current = graceActive }, [graceActive])
 
   const pauseRef = useRef<(() => void) | null>(null)
+  const [rangeEnded, setRangeEnded] = useState(false)
 
   const handleVideoTimeUpdate = useCallback(
     (time: number) => {
       if (gamePausedRef.current) return
-      const lastEnd = lines[lines.length - 1]?.segment.end
-      if (lastEnd !== undefined && time >= lastEnd) {
+      if (hardEndSec !== null && time >= hardEndSec) {
         pauseRef.current?.()
+        setRangeEnded(true)
         return
       }
       handleTimeUpdate(time, answers[activeIndex] ?? {}, activeIndex)
@@ -129,6 +132,7 @@ export function PlayerView() {
     gamePausedRef.current = false
     setGamePaused(false)
     pausedMidGraceRef.current = false
+    setRangeEnded(false)
     resetGame()
     seekTo(0)
     pause()
@@ -154,6 +158,11 @@ export function PlayerView() {
     }
     prevGraceActiveRef.current = graceActive
   }, [graceActive, gameOver, pause, play])
+
+  // Pause video when game is over
+  useEffect(() => {
+    if (gameOver) pause()
+  }, [gameOver, pause])
 
   // Resume video when player chooses "continue without score"
   const prevFreePlayRef = useRef(false)
@@ -185,6 +194,7 @@ export function PlayerView() {
         const line = lines[activeIndexRef.current]
         if (!line) return
         pauseGrace()
+        setRangeEnded(false)
         seekTo(line.segment.start)
         play()
         return
@@ -195,6 +205,7 @@ export function PlayerView() {
         const target = Math.max(0, activeIndexRef.current - 1)
         if (target === activeIndexRef.current) return
         pauseGrace()
+        setRangeEnded(false)
         seekTo(lines[target].segment.start)
         play()
         return
@@ -205,6 +216,7 @@ export function PlayerView() {
         const target = Math.min(maxReachedRef.current, activeIndexRef.current + 1)
         if (target === activeIndexRef.current) return
         pauseGrace()
+        setRangeEnded(false)
         seekTo(lines[target].segment.start)
         play()
         return
@@ -289,6 +301,7 @@ export function PlayerView() {
           paused={gamePaused}
           onResume={handleResume}
           onRestart={handleStartOver}
+          rangeEnded={rangeEnded}
         />
 
         {/* Keyboard hints — only shown after game has started */}

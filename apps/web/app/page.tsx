@@ -24,6 +24,7 @@ function formatTime(s: number): string {
 }
 
 function parseTime(str: string): number | null {
+  if (str.trim().startsWith('-')) return null
   const parts = str.split(':')
   if (parts.length === 2) {
     const m = parseInt(parts[0], 10)
@@ -60,11 +61,10 @@ export default function Home() {
       const text = ev.target?.result as string ?? ''
       const segments = parseSrt(text)
       if (segments.length > 0) {
-        const minT = segments[0].start
         const maxT = segments[segments.length - 1].end
         setParsedSegments(segments)
-        setRangeStart(formatTime(minT))
-        setRangeEnd(formatTime(maxT))
+        setRangeStart('0:00')
+        setRangeEnd('')
       } else {
         setParsedSegments(null)
       }
@@ -89,24 +89,50 @@ export default function Home() {
       return
     }
 
-    // Parse and validate range
+    // Parse and validate start time
+    const lastSegEnd = parsedSegments[parsedSegments.length - 1].end
     const startSec = parseTime(rangeStart)
-    const endSec   = parseTime(rangeEnd)
-    if (startSec === null || endSec === null) {
-      setError('Invalid time format. Use M:SS (e.g. 1:30).')
-      return
-    }
-    if (startSec >= endSec) {
-      setError('Start time must be before end time.')
+    if (startSec === null) {
+      setError('Invalid start time. Use M:SS (e.g. 1:30).')
       return
     }
 
-    // Filter segments to the selected range
-    const filtered = parsedSegments.filter(s => s.start >= startSec && s.start < endSec)
+
+    // Parse end time — empty means no upper limit
+    let endSec: number | null = null
+    if (rangeEnd.trim() !== '') {
+      endSec = parseTime(rangeEnd)
+      if (endSec === null) {
+        setError('Invalid end time. Use M:SS (e.g. 10:00).')
+        return
+      }
+      if (endSec > lastSegEnd) {
+        setError(`End time cannot exceed ${formatTime(lastSegEnd)} (last subtitle).`)
+        return
+      }
+      if (startSec >= endSec) {
+        setError('Start time must be before end time.')
+        return
+      }
+    } else {
+      // No end time set — still validate start is not past all subtitles
+      if (startSec >= lastSegEnd) {
+        setError(`Start time cannot be after the last subtitle (${formatTime(lastSegEnd)}).`)
+        return
+      }
+    }
+
+    // Filter segments — no upper bound if endSec is null
+    const filtered = parsedSegments.filter(s =>
+      s.start >= startSec && (endSec === null || s.start < endSec)
+    )
     if (filtered.length === 0) {
       setError('No subtitles found in the selected range.')
       return
     }
+
+    // Build player URL — include &to=X only when an end time was set
+    const toParam = endSec !== null ? `&to=${endSec}` : ''
 
     if (source === 'youtube') {
       const videoId = extractVideoId(url.trim())
@@ -115,7 +141,7 @@ export default function Home() {
         return
       }
       sessionStorage.setItem(`srt:${videoId}`, JSON.stringify(filtered))
-      router.push(`/player?v=${videoId}&d=${difficulty}`)
+      router.push(`/player?v=${videoId}&d=${difficulty}${toParam}`)
     } else {
       if (!blobUrlRef.current) {
         setError('Please select a video file.')
@@ -123,11 +149,10 @@ export default function Home() {
       }
       sessionStorage.setItem('srt:local', JSON.stringify(filtered))
       setLocalVideoUrl(blobUrlRef.current)
-      router.push(`/player?source=local&d=${difficulty}`)
+      router.push(`/player?source=local&d=${difficulty}${toParam}`)
     }
   }
 
-  const minTime = parsedSegments ? formatTime(parsedSegments[0].start) : null
   const maxTime = parsedSegments ? formatTime(parsedSegments[parsedSegments.length - 1].end) : null
 
   return (
@@ -222,7 +247,7 @@ export default function Home() {
             <p className="text-sm font-medium text-gray-700">
               Video range
               <span className="text-xs font-normal text-gray-400 ml-2">
-                ({minTime} – {maxTime})
+                (max: {maxTime})
               </span>
             </p>
             <div className="flex items-center gap-3">
@@ -243,7 +268,8 @@ export default function Home() {
                   type="text"
                   value={rangeEnd}
                   onChange={(e) => setRangeEnd(e.target.value)}
-                  placeholder="10:00"
+                  placeholder={maxTime ?? ''}
+                  max={maxTime ?? undefined}
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                 />
               </div>

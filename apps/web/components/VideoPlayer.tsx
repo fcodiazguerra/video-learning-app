@@ -9,6 +9,7 @@ interface BaseProps {
   paused?: boolean
   onResume?: () => void
   onRestart?: () => void
+  rangeEnded?: boolean
 }
 
 type Props = BaseProps & (
@@ -16,7 +17,7 @@ type Props = BaseProps & (
   | { videoRef: RefObject<HTMLVideoElement | null>;  containerRef?: never }
 )
 
-export function VideoPlayer({ containerRef, videoRef, isReady, showStart, onStart, paused, onResume, onRestart }: Props) {
+export function VideoPlayer({ containerRef, videoRef, isReady, showStart, onStart, paused, onResume, onRestart, rangeEnded }: Props) {
   return (
     <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
 
@@ -53,6 +54,16 @@ export function VideoPlayer({ containerRef, videoRef, isReady, showStart, onStar
               <polygon points="2,1 13,7 2,13"/>
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* Range ended overlay */}
+      {rangeEnded && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60">
+          <div className="text-center space-y-2">
+            <p className="text-white text-2xl font-bold">End of selection</p>
+            <p className="text-white/70 text-sm">You've reached the end of the selected range.</p>
+          </div>
         </div>
       )}
 
