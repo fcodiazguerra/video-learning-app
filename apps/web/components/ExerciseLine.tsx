@@ -8,6 +8,7 @@ interface Props {
   answers: Record<number, AnswerState>
   onAnswer: (tokenIndex: number, value: string) => void
   onReveal?: (tokenIndex: number) => void
+  onHint?: () => void
   onWordClick?: (word: string) => void
 }
 
@@ -16,6 +17,7 @@ interface BlankProps {
   answer: AnswerState | undefined
   onAnswer: (value: string) => void
   onReveal?: () => void
+  onHint?: () => void
   shouldFocus: boolean
   onWordClick?: (word: string) => void
 }
@@ -24,7 +26,7 @@ function isAlpha(c: string): boolean {
   return /[a-zA-Z]/.test(c)
 }
 
-function BlankInput({ token, answer, onAnswer, onReveal, shouldFocus, onWordClick }: BlankProps) {
+function BlankInput({ token, answer, onAnswer, onReveal, onHint, shouldFocus, onWordClick }: BlankProps) {
   const [typed, setTyped]         = useState('')
   const [wrongChar, setWrongChar] = useState<string | null>(null)
   const spanRef       = useRef<HTMLSpanElement>(null)
@@ -59,8 +61,19 @@ function BlankInput({ token, answer, onAnswer, onReveal, shouldFocus, onWordClic
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
     if (isCorrect) return
-    if (e.key === 'Tab') return
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      if (nextAlphaPos < expected.length) {
+        const newTyped = expected.slice(0, nextAlphaPos + 1)
+        setTyped(newTyped)
+        onHint?.()
+        const remaining = expected.slice(nextAlphaPos + 1)
+        if (!remaining.split('').some(isAlpha)) onAnswer(expected)
+      }
+      return
+    }
     if (e.key === 'Backspace') return
+    if (e.key === ' ') return   // let space bubble to global pause/play handler
     if (e.key === 'Enter') {
       e.preventDefault()
       onReveal?.()
@@ -143,7 +156,7 @@ function BlankInput({ token, answer, onAnswer, onReveal, shouldFocus, onWordClic
   )
 }
 
-export function ExerciseLine({ line, answers, onAnswer, onReveal, onWordClick }: Props) {
+export function ExerciseLine({ line, answers, onAnswer, onReveal, onHint, onWordClick }: Props) {
   const firstIncompleteIdx = line.tokens.find(
     (t) => t.kind === 'blank' && answers[t.index]?.status !== 'correct'
   )?.index ?? -1
@@ -169,6 +182,7 @@ export function ExerciseLine({ line, answers, onAnswer, onReveal, onWordClick }:
             answer={answers[token.index]}
             onAnswer={(value) => onAnswer(token.index, value)}
             onReveal={() => onReveal?.(token.index)}
+            onHint={onHint}
             shouldFocus={token.index === firstIncompleteIdx}
             onWordClick={onWordClick}
           />

@@ -181,6 +181,19 @@ export function useExercise(lines: ExerciseLine[], difficulty: Difficulty) {
     [lines, checkGrace, awardBonusForBlank]
   )
 
+  // Deduct time for one hint character (P key). No-op in free play.
+  const deductTimeForHint = useCallback(() => {
+    if (graceRemainingRef.current === null || freePlayRef.current) return
+    const penalty = bonusForBlank(1, difficulty)
+    const next = Math.max(0, graceRemainingRef.current - penalty)
+    graceRemainingRef.current = next
+    setGraceRemaining(next)
+    if (next <= 0) {
+      stopGrace()
+      setGameOver(true)
+    }
+  }, [difficulty, stopGrace])
+
   // Reveal the answer for a blank (Enter key). Applies a time penalty instead of a bonus.
   const revealBlank = useCallback(
     (lineIndex: number, tokenIndex: number) => {
@@ -257,7 +270,7 @@ export function useExercise(lines: ExerciseLine[], difficulty: Difficulty) {
     activeIndex, maxReachedIndex,
     setActiveByTime, handleTimeUpdate,
     pauseGrace, resumeGrace,
-    submitAnswer, revealBlank, answers, score,
+    submitAnswer, revealBlank, deductTimeForHint, answers, score,
     graceActive, graceRemaining,
     graceMax: GRACE_SECONDS,
     gameOver, freePlay,

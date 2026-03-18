@@ -7,7 +7,8 @@ function timeToSeconds(t: string): number {
   return h * 3600 + m * 60 + s + Number(ms) / 1000
 }
 
-// Remove bracketed/parenthesized annotations, music notes, lone dashes
+// Remove bracketed/parenthesized annotations, music notes, lone dashes,
+// and character name prefixes like "ALPHA: " or "DR. SMITH: "
 function cleanText(raw: string): string {
   return raw
     .replace(/\[.*?\]/g, '')
@@ -15,7 +16,8 @@ function cleanText(raw: string): string {
     .replace(/♪[^♪]*♪?/g, '')
     .replace(/♫[^♫]*♫?/g, '')
     .replace(/^[-–—]+$/, '')
-    .replace(/<[^>]+>/g, '')   // HTML tags sometimes present in SRT
+    .replace(/<[^>]+>/g, '')            // HTML tags sometimes present in SRT
+    .replace(/^[A-Z][A-Z0-9\s\.\-']*:\s*/, '') // character names e.g. "ALPHA: " "DR. SMITH: " "MAN 1: "
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase()
@@ -37,13 +39,10 @@ export function parseSrt(content: string): SubtitleSegment[] {
     const start = timeToSeconds(startRaw)
     const end   = timeToSeconds(endRaw)
 
-    // Text lines: everything after the timecode line
+    // Text lines: everything after the timecode line.
+    // Join first so multi-line annotations like (MID-TEMPO\nMUSIC PLAYS) are caught as one.
     const timeLineIdx = lines.indexOf(timeLine)
-    const text = lines
-      .slice(timeLineIdx + 1)
-      .map(cleanText)
-      .filter(Boolean)
-      .join(' ')
+    const text = cleanText(lines.slice(timeLineIdx + 1).join(' '))
 
     if (text) segments.push({ start, end, text })
   }

@@ -36,7 +36,7 @@ export function PlayerView() {
     activeIndex, maxReachedIndex,
     setActiveByTime, handleTimeUpdate,
     pauseGrace, resumeGrace,
-    submitAnswer, revealBlank, answers, score,
+    submitAnswer, revealBlank, deductTimeForHint, answers, score,
     graceActive, graceRemaining, graceMax,
     gameOver, freePlay,
     resetGame, continueWithoutScore,
@@ -186,8 +186,19 @@ export function PlayerView() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore until the user has pressed Play at least once
       if (!hasStartedRef.current) return
-      // Ignore when game is manually paused or over
-      if (gamePausedRef.current || gameOverRef.current) return
+      // Ignore when game is over
+      if (gameOverRef.current) return
+
+      // Space: toggle pause/play
+      if (e.key === ' ') {
+        e.preventDefault()
+        if (gamePausedRef.current) handleResume()
+        else handlePause()
+        return
+      }
+
+      // Ignore remaining shortcuts when game is manually paused
+      if (gamePausedRef.current) return
 
       if (e.key === 'Backspace') {
         e.preventDefault()
@@ -313,6 +324,8 @@ export function PlayerView() {
               <kbd className="bg-gray-100 border border-gray-300 rounded px-1">↓</kbd> navigate
             </span>
             <span><kbd className="bg-gray-100 border border-gray-300 rounded px-1">↵</kbd> reveal</span>
+            <span><kbd className="bg-gray-100 border border-gray-300 rounded px-1">Tab</kbd> hint</span>
+            <span><kbd className="bg-gray-100 border border-gray-300 rounded px-1">Space</kbd> pause</span>
           </div>
         )}
 
@@ -367,6 +380,7 @@ export function PlayerView() {
               answers={activeAnswers}
               onAnswer={(tokenIndex, value) => submitAnswer(activeIndex, tokenIndex, value)}
               onReveal={(tokenIndex) => revealBlank(activeIndex, tokenIndex)}
+              onHint={deductTimeForHint}
               onWordClick={handleWordClick}
             />
             {lineComplete && blanksTotal > 0 && (
