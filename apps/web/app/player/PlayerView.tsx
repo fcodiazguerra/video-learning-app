@@ -7,19 +7,23 @@ import { ExerciseLine } from '../../components/ExerciseLine'
 import { buildExercise, parseDifficulty } from '../../lib/exercise'
 import { useExercise } from '../../hooks/useExercise'
 import { useYouTubePlayer } from '../../hooks/useYouTubePlayer'
+import { useLocalVideoPlayer } from '../../hooks/useLocalVideoPlayer'
+import { getLocalVideoUrl } from '../../lib/localVideo'
 import { SubtitleSegment } from '../../lib/types'
 
 export function PlayerView() {
   const params     = useSearchParams()
   const videoId    = params.get('v') ?? ''
+  const isLocal    = params.get('source') === 'local'
   const difficulty = parseDifficulty(params.get('d'))
 
   const segments = useMemo<SubtitleSegment[] | null>(() => {
-    if (!videoId) return null
-    const raw = sessionStorage.getItem(`srt:${videoId}`)
+    const key = isLocal ? 'srt:local' : `srt:${videoId}`
+    if (!isLocal && !videoId) return null
+    const raw = sessionStorage.getItem(key)
     if (!raw) return null
     try { return JSON.parse(raw) } catch { return null }
-  }, [videoId])
+  }, [videoId, isLocal])
 
   const lines = useMemo(
     () => segments ? buildExercise(segments, difficulty) : [],
@@ -78,8 +82,12 @@ export function PlayerView() {
     [setActiveByTime, handleTimeUpdate, answers, activeIndex]
   )
 
-  const { containerRef, isReady, pause, play, seekTo } =
-    useYouTubePlayer({ videoId, onTimeUpdate: handleVideoTimeUpdate })
+  const ytPlayer    = useYouTubePlayer({ videoId, onTimeUpdate: handleVideoTimeUpdate, skip: isLocal })
+  const localPlayer = useLocalVideoPlayer({ src: isLocal ? (getLocalVideoUrl() ?? '') : '', onTimeUpdate: handleVideoTimeUpdate, skip: !isLocal })
+
+  const { isReady, pause, play, seekTo } = isLocal ? localPlayer : ytPlayer
+  const containerRef = isLocal ? undefined : ytPlayer.containerRef
+  const videoRef     = isLocal ? localPlayer.videoRef : undefined
 
   // Initial Start button — starts the video for the very first time.
   const handleStart = useCallback(() => {
@@ -198,7 +206,7 @@ export function PlayerView() {
   }, [lines, pauseGrace, seekTo, play])
 
   // ── Render ──────────────────────────────────────────────────────────────────
-  if (!videoId || !segments) {
+  if ((!videoId && !isLocal) || !segments) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-sm">
         <p className="text-gray-500">No subtitles found for this video.</p>
@@ -264,7 +272,7 @@ export function PlayerView() {
 
         {/* Video — start overlay and pause menu live inside the video area */}
         <VideoPlayer
-          containerRef={containerRef}
+          {...(isLocal ? { videoRef: videoRef! } : { containerRef: containerRef! })}
           isReady={isReady}
           showStart={isReady && !hasStarted}
           onStart={handleStart}

@@ -34,9 +34,10 @@ const YT_PLAYING = 1
 interface Options {
   videoId: string
   onTimeUpdate: (time: number) => void
+  skip?: boolean
 }
 
-export function useYouTubePlayer({ videoId, onTimeUpdate }: Options) {
+export function useYouTubePlayer({ videoId, onTimeUpdate, skip }: Options) {
   const containerRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<YTPlayerInstance | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
@@ -77,6 +78,7 @@ export function useYouTubePlayer({ videoId, onTimeUpdate }: Options) {
   }, [videoId])
 
   useEffect(() => {
+    if (skip) return
     const cleanup = () => {
       clearInterval(intervalRef.current)
       playerRef.current?.destroy()
@@ -92,7 +94,7 @@ export function useYouTubePlayer({ videoId, onTimeUpdate }: Options) {
       window.onYouTubeIframeAPIReady = initPlayer
     }
     return cleanup
-  }, [initPlayer])
+  }, [initPlayer, skip])
 
   // Preserve focus so YouTube iframe doesn't steal it on pause/play API calls.
   const withFocusPreserved = useCallback((fn: () => void) => {

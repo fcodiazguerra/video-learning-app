@@ -2,8 +2,7 @@
 
 import { RefObject } from 'react'
 
-interface Props {
-  containerRef: RefObject<HTMLDivElement | null>
+interface BaseProps {
   isReady: boolean
   showStart?: boolean
   onStart?: () => void
@@ -12,16 +11,35 @@ interface Props {
   onRestart?: () => void
 }
 
-export function VideoPlayer({ containerRef, isReady, showStart, onStart, paused, onResume, onRestart }: Props) {
+type Props = BaseProps & (
+  | { containerRef: RefObject<HTMLDivElement | null>; videoRef?: never }
+  | { videoRef: RefObject<HTMLVideoElement | null>;  containerRef?: never }
+)
+
+export function VideoPlayer({ containerRef, videoRef, isReady, showStart, onStart, paused, onResume, onRestart }: Props) {
   return (
     <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
-      <div ref={containerRef} className="absolute inset-0" />
+
+      {/* YouTube container */}
+      {containerRef && <div ref={containerRef} className="absolute inset-0" />}
+
+      {/* Local video element */}
+      {videoRef && (
+        <video
+          ref={videoRef}
+          className="absolute inset-0 w-full h-full"
+          playsInline
+          preload="metadata"
+        />
+      )}
+
       {!isReady && (
         <div className="absolute inset-0 flex items-center justify-center text-white text-sm">
           Loading player…
         </div>
       )}
-      {/* Always-on overlay — blocks all direct interaction with the YouTube iframe */}
+
+      {/* Always-on overlay — blocks direct interaction with the player */}
       {isReady && <div className="absolute inset-0 z-10" />}
 
       {/* Initial start overlay */}
